@@ -24,7 +24,6 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -47,7 +46,6 @@ import (
 	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/images"
 	encconfig "github.com/containerd/containerd/images/encryption/config"
-	"github.com/containerd/containerd/images/encryption/utils"
 	"github.com/containerd/containerd/leases"
 	leasesproxy "github.com/containerd/containerd/leases/proxy"
 	"github.com/containerd/containerd/namespaces"
@@ -406,11 +404,7 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpt) (Image
 
 	if pullCtx.Unpack {
 		if len(c.decryptionKeys) != 0 {
-			dcparameters, err := utils.SortDecryptionKeys(strings.Join(c.decryptionKeys, ","))
-			if err != nil {
-				return nil, err
-			}
-			i.SetDecryptionParameters(dcparameters)
+			i.SetDecryptionParameters(c.decryptionKeys)
 		}
 		if err := i.Unpack(ctx, pullCtx.Snapshotter); err != nil {
 			return nil, errors.Wrapf(err, "failed to unpack image on snapshotter %s", pullCtx.Snapshotter)

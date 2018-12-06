@@ -30,6 +30,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images/encryption"
 	encconfig "github.com/containerd/containerd/images/encryption/config"
+	"github.com/containerd/containerd/images/encryption/utils"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/platforms"
 	digest "github.com/opencontainers/go-digest"
@@ -37,6 +38,8 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
+
+const DecryptionKey = "_decryptionKey"
 
 // Image provides the model for how containerd views container images.
 type Image struct {
@@ -520,6 +523,36 @@ func DecryptBlob(cc *encconfig.CryptoConfig, data []byte, desc ocispec.Descripto
 		return ocispec.Descriptor{}, []byte{}, errors.Errorf("Decryption: unsupporter layer MediaType: %s\n", desc.MediaType)
 	}
 	return newDesc, p, nil
+}
+
+// GetLayerCryptoConfig get the decryption parameters neccessary to decrypt a given descriptor
+func GetLayerCryptoConfig(desc ocispec.Descriptor, privateKeysString string) (*encconfig.CryptoConfig, error) {
+	ds := platforms.DefaultSpec()
+	layerInfo := encryption.LayerInfo{
+		Descriptor: ocispec.Descriptor{
+			Digest:      desc.Digest,
+			Platform:    &ds,
+			Annotations: desc.Annotations,
+		},
+	}
+
+	dcparameters, err := utils.SortDecryptionKeys(privateKeysString)
+	if err != nil {
+		return nil, err
+	}
+
+	err = encryption.GPGSetupPrivateKeys(dcparameters, []encryption.LayerInfo{layerInfo})
+	if err != nil {
+		return nil, err
+	}
+
+	cc := &encconfig.CryptoConfig{
+		Dc: &encconfig.DecryptConfig{
+			Parameters: dcparameters,
+		},
+	}
+
+	return cc, nil
 }
 
 // decryptLayer decrypts the layer using the CryptoConfig and creates a new OCI Descriptor.
