@@ -113,17 +113,17 @@ If foobar.tar contains an OCI ref named "latest" and anonymous ref "sha256:deadb
 			return closeErr
 		}
 
-		dcparameters, err := CreateDcParameters(context, nil)
-		if err != nil {
-			return err
-		}
+		// dcparameters, err := CreateDcParameters(context, nil)
+		// if err != nil {
+		// 	return err
+		// }
 
 		log.G(ctx).Debugf("unpacking %d images", len(imgs))
 
 		for _, img := range imgs {
 			// TODO: Allow configuration of the platform
 			image := containerd.NewImage(client, img)
-			image.SetDecryptionParameters(dcparameters)
+			//	image.SetDecryptionParameters(dcparameters)
 
 			// TODO: Show unpack status
 			fmt.Printf("unpacking %s (%s)...", img.Name, img.Target.Digest)

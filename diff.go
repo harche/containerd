@@ -46,11 +46,10 @@ type diffRemote struct {
 	client diffapi.DiffClient
 }
 
-func (r *diffRemote) Apply(ctx context.Context, diff ocispec.Descriptor, mounts []mount.Mount, cc *encconfig.CryptoConfig) (ocispec.Descriptor, error) {
+func (r *diffRemote) Apply(ctx context.Context, diff ocispec.Descriptor, mounts []mount.Mount) (ocispec.Descriptor, error) {
 	req := &diffapi.ApplyRequest{
-		Diff:         fromDescriptor(diff),
-		Mounts:       fromMounts(mounts),
-		Dcparameters: fromCryptoConfig(cc),
+		Diff:   fromDescriptor(diff),
+		Mounts: fromMounts(mounts),
 	}
 	resp, err := r.client.Apply(ctx, req)
 	if err != nil {

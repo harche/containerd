@@ -107,15 +107,15 @@ command. As part of this process, we do the following:
 			p = append(p, platforms.DefaultSpec())
 		}
 
-		dcparameters, err := CreateDcParameters(context, nil)
-		if err != nil {
-			return err
-		}
+		// dcparameters, err := CreateDcParameters(context, nil)
+		// if err != nil {
+		// 	return err
+		// }
 
 		for _, platform := range p {
 			fmt.Printf("unpacking %s %s...\n", platforms.Format(platform), img.Target.Digest)
 			i := containerd.NewImageWithPlatform(client, img, platforms.Only(platform))
-			i.SetDecryptionParameters(dcparameters)
+			//i.SetDecryptionParameters(dcparameters)
 			err = i.Unpack(ctx, context.String("snapshotter"))
 			if err != nil {
 				return err

@@ -19,12 +19,11 @@ package containerd
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/images/encryption"
-	encconfig "github.com/containerd/containerd/images/encryption/config"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/rootfs"
 	digest "github.com/opencontainers/go-digest"
@@ -53,8 +52,9 @@ type Image interface {
 	IsUnpacked(context.Context, string) (bool, error)
 	// ContentStore provides a content store which contains image blob data
 	ContentStore() content.Store
-	// SetDecryptionParameters sets the map holding the decryption keys
-	SetDecryptionParameters(dcparameters map[string][][]byte)
+	// SetDecryptionParameters sets the slice holding the decryption keys
+	// Each key is of format <base64 of private key>:<passwd>
+	SetDecryptionParameters(dcparameters []string)
 }
 
 var _ = (Image)(&image{})
@@ -82,7 +82,7 @@ type image struct {
 
 	i            images.Image
 	platform     platforms.MatchComparer
-	dcparameters map[string][][]byte
+	dcparameters []string
 }
 
 func (i *image) Name() string {
@@ -153,32 +153,17 @@ func (i *image) Unpack(ctx context.Context, snapshotterName string) error {
 		unpacked bool
 	)
 
-	for id, layer := range layers {
-		var cc *encconfig.CryptoConfig
+	for _, layer := range layers {
+		//var cc *encconfig.CryptoConfig
 		if i.dcparameters != nil || len(i.dcparameters) > 0 {
-			ds := platforms.DefaultSpec()
-			layerInfo := encryption.LayerInfo{
-				Index: uint32(id),
-				Descriptor: ocispec.Descriptor{
-					Digest:      layer.Blob.Digest,
-					Platform:    &ds,
-					Annotations: layer.Blob.Annotations,
-				},
+			if layer.Blob.Annotations == nil {
+				layer.Blob.Annotations = make(map[string]string)
 			}
 
-			err = encryption.GPGSetupPrivateKeys(i.dcparameters, []encryption.LayerInfo{layerInfo})
-			if err != nil {
-				return err
-			}
-
-			cc = &encconfig.CryptoConfig{
-				Dc: &encconfig.DecryptConfig{
-					Parameters: i.dcparameters,
-				},
-			}
+			layer.Blob.Annotations[images.DecryptionKey] = strings.Join(i.dcparameters, ",")
 		}
 
-		unpacked, err = rootfs.ApplyLayer(ctx, layer, chain, sn, a, cc)
+		unpacked, err = rootfs.ApplyLayer(ctx, layer, chain, sn, a)
 		if err != nil {
 			return err
 		}
@@ -200,8 +185,9 @@ func (i *image) Unpack(ctx context.Context, snapshotterName string) error {
 			// Image authorization check prevents access to the cached encrypted images
 			// without valid private keys that can decrypt those encrypted images.
 			if images.IsEncryptedDiff(ctx, layer.Blob.MediaType) {
-				if cc == nil {
-					return fmt.Errorf("Unable to check authorization since decryption params are nil")
+				cc, err := images.GetLayerCryptoConfig(layer.Blob, strings.Join(i.dcparameters, ","))
+				if err != nil {
+					return err
 				}
 				err = images.CheckAuthorization(ctx, cs, i.Target(), cc.Dc)
 				if err != nil {
@@ -266,6 +252,6 @@ func (i *image) ContentStore() content.Store {
 	return i.client.ContentStore()
 }
 
-func (i *image) SetDecryptionParameters(dcparameters map[string][][]byte) {
+func (i *image) SetDecryptionParameters(dcparameters []string) {
 	i.dcparameters = dcparameters
 }
