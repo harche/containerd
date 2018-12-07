@@ -17,6 +17,7 @@
 package images
 
 import (
+	b64 "encoding/base64"
 	"fmt"
 
 	"github.com/containerd/containerd"
@@ -107,15 +108,52 @@ command. As part of this process, we do the following:
 			p = append(p, platforms.DefaultSpec())
 		}
 
-		// dcparameters, err := CreateDcParameters(context, nil)
-		// if err != nil {
-		// 	return err
-		// }
+		if err != nil {
+			return err
+		}
+
+		layers32 := commands.IntToInt32Array(context.IntSlice("layer"))
+
+		layerInfos, err := getImageLayerInfo(client, ctx, img.Name, layers32, context.StringSlice("platform"))
+		if err != nil {
+			return err
+		}
+
+		isEncrypted := false
+		for i := 0; i < len(layerInfos); i++ {
+			if len(layerInfos[i].Descriptor.Annotations) > 0 {
+				isEncrypted = true
+				break
+			}
+		}
 
 		for _, platform := range p {
 			fmt.Printf("unpacking %s %s...\n", platforms.Format(platform), img.Target.Digest)
 			i := containerd.NewImageWithPlatform(client, img, platforms.Only(platform))
-			//i.SetDecryptionParameters(dcparameters)
+
+			if isEncrypted {
+				dcKeys, _ := CreateDcParameters(context, layerInfos)
+				var dcparameters []string
+
+				gpgKeys := dcKeys["gpg-privatekeys"]
+				gpgKeysPasswd := dcKeys["gpg-privatekeys-passwords"]
+				for idx, gpgKey := range gpgKeys {
+					base64GpgKey := b64.StdEncoding.EncodeToString(gpgKey)
+					base64GpgKeyPasswd := b64.StdEncoding.EncodeToString(gpgKeysPasswd[idx])
+					dcparameters = append(dcparameters, base64GpgKey+":"+base64GpgKeyPasswd)
+				}
+
+				privKeys := dcKeys["privkeys"]
+				privateKeysPasswd := dcKeys["privkeys-passwords"]
+				for idx, privKey := range privKeys {
+					base64GpgKey := b64.StdEncoding.EncodeToString(privKey)
+					base64GpgKeyPasswd := b64.StdEncoding.EncodeToString(privateKeysPasswd[idx])
+					dcparameters = append(dcparameters, base64GpgKey+":"+base64GpgKeyPasswd)
+				}
+
+				i.SetDecryptionParameters(dcparameters)
+
+			}
 			err = i.Unpack(ctx, context.String("snapshotter"))
 			if err != nil {
 				return err

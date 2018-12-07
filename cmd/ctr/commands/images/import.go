@@ -17,6 +17,7 @@
 package images
 
 import (
+	b64 "encoding/base64"
 	"fmt"
 	"io"
 	"os"
@@ -113,16 +114,51 @@ If foobar.tar contains an OCI ref named "latest" and anonymous ref "sha256:deadb
 			return closeErr
 		}
 
-		// dcparameters, err := CreateDcParameters(context, nil)
-		// if err != nil {
-		// 	return err
-		// }
-
 		log.G(ctx).Debugf("unpacking %d images", len(imgs))
 
 		for _, img := range imgs {
-			// TODO: Allow configuration of the platform
+			layers32 := commands.IntToInt32Array(context.IntSlice("layer"))
+
+			layerInfos, err := getImageLayerInfo(client, ctx, img.Name, layers32, context.StringSlice("platform"))
+			if err != nil {
+				return err
+			}
+
 			image := containerd.NewImage(client, img)
+			isEncrypted := false
+			for i := 0; i < len(layerInfos); i++ {
+				if len(layerInfos[i].Descriptor.Annotations) > 0 {
+					isEncrypted = true
+
+					break
+				}
+			}
+
+			if isEncrypted {
+				dcKeys, _ := CreateDcParameters(context, layerInfos)
+				var dcparameters []string
+
+				gpgKeys := dcKeys["gpg-privatekeys"]
+				gpgKeysPasswd := dcKeys["gpg-privatekeys-passwords"]
+				for idx, gpgKey := range gpgKeys {
+					base64GpgKey := b64.StdEncoding.EncodeToString(gpgKey)
+					base64GpgKeyPasswd := b64.StdEncoding.EncodeToString(gpgKeysPasswd[idx])
+					dcparameters = append(dcparameters, base64GpgKey+":"+base64GpgKeyPasswd)
+				}
+
+				privKeys := dcKeys["privkeys"]
+				privateKeysPasswd := dcKeys["privkeys-passwords"]
+				for idx, privKey := range privKeys {
+					base64GpgKey := b64.StdEncoding.EncodeToString(privKey)
+					base64GpgKeyPasswd := b64.StdEncoding.EncodeToString(privateKeysPasswd[idx])
+					dcparameters = append(dcparameters, base64GpgKey+":"+base64GpgKeyPasswd)
+				}
+
+				image.SetDecryptionParameters(dcparameters)
+			}
+
+			// TODO: Allow configuration of the platform
+
 			//	image.SetDecryptionParameters(dcparameters)
 
 			// TODO: Show unpack status
