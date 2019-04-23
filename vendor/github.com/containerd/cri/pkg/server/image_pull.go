@@ -100,6 +100,7 @@ func (c *criService) PullImage(ctx context.Context, r *runtime.PullImageRequest)
 	image, err := c.client.Pull(ctx, ref,
 		containerd.WithSchema1Conversion,
 		containerd.WithResolver(resolver),
+		containerd.WithDecryptionKeys(r.GetDcparams().GetPrivateKeyPasswds()),
 		containerd.WithPullSnapshotter(c.config.ContainerdConfig.Snapshotter),
 		containerd.WithPullUnpack,
 	)
