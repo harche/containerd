@@ -18,7 +18,6 @@ package server
 
 import (
 	"encoding/base64"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
@@ -98,7 +97,6 @@ func (c *criService) PullImage(ctx context.Context, r *runtime.PullImageRequest)
 	// image has already been converted.
 	isSchema1 := desc.MediaType == containerdimages.MediaTypeDockerSchema1Manifest
 
-	ioutil.WriteFile("/tmp/HH", []byte(r.GetDcparams().GetPrivateKeyPasswds()[0]), 0644)
 	image, err := c.client.Pull(ctx, ref,
 		containerd.WithSchema1Conversion,
 		containerd.WithResolver(resolver),
